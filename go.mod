@@ -228,3 +228,5 @@ require (
 )
 
 replace github.com/opencontainers/runc => github.com/opencontainers/runc v1.1.1-0.20240131200429-02120488a4c0
+
+replace github.com/containers/storage => github.com/akihikodaki/storage v0.0.0-20240528234206-96545b8496c1
