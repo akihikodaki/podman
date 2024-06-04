@@ -21,7 +21,7 @@ require (
 	github.com/containers/libhvee v0.7.1
 	github.com/containers/ocicrypt v1.1.10
 	github.com/containers/psgo v1.9.0
-	github.com/containers/storage v1.54.0
+	github.com/containers/storage v1.54.1-0.20240603203045-9661c8f9f81a
 	github.com/containers/winquit v1.1.0
 	github.com/coreos/go-systemd/v22 v22.5.1-0.20231103132048-7d375ecc2b09
 	github.com/coreos/stream-metadata-go v0.4.4
@@ -228,5 +228,3 @@ require (
 )
 
 replace github.com/opencontainers/runc => github.com/opencontainers/runc v1.1.1-0.20240131200429-02120488a4c0
-
-replace github.com/containers/storage => github.com/akihikodaki/storage v0.0.0-20240528234206-96545b8496c1

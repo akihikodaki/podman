@@ -355,7 +355,7 @@ github.com/containers/psgo/internal/dev
 github.com/containers/psgo/internal/host
 github.com/containers/psgo/internal/proc
 github.com/containers/psgo/internal/process
-# github.com/containers/storage v1.54.0 => ../storage
+# github.com/containers/storage v1.54.1-0.20240603203045-9661c8f9f81a
 ## explicit; go 1.21
 github.com/containers/storage
 github.com/containers/storage/drivers
@@ -1380,4 +1380,3 @@ tags.cncf.io/container-device-interface/pkg/parser
 ## explicit; go 1.19
 tags.cncf.io/container-device-interface/specs-go
 # github.com/opencontainers/runc => github.com/opencontainers/runc v1.1.1-0.20240131200429-02120488a4c0
-# github.com/containers/storage => ../storage
