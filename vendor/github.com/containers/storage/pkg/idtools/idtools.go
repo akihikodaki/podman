@@ -38,9 +38,10 @@ func (e ranges) Swap(i, j int)      { e[i], e[j] = e[j], e[i] }
 func (e ranges) Less(i, j int) bool { return e[i].Start < e[j].Start }
 
 const (
-	subuidFileName          string = "/etc/subuid"
-	subgidFileName          string = "/etc/subgid"
-	ContainersOverrideXattr        = "user.containers.override_stat"
+	subuidFileName             string = "/etc/subuid"
+	subgidFileName             string = "/etc/subgid"
+	FuseoverlayfsOverrideXattr        = "user.fuseoverlayfs.override_stat"
+	ContainersOverrideXattr           = "user.containers.override_stat"
 )
 
 // MkdirAllAs creates a directory (include any along the path) and then modifies
@@ -367,21 +368,73 @@ func checkChownErr(err error, name string, uid, gid int) error {
 	return err
 }
 
+// Stat contains file states that can be overriden with extended attributes.
+type Stat struct {
+	IDs  IDPair
+	Mode os.FileMode
+}
+
+// GetOverrideXattr will get and decode an extended attribute overriding file
+// states.
+func GetOverrideXattr(path, xattr string) (Stat, error) {
+	var stat Stat
+	xstat, err := system.Lgetxattr(path, xattr)
+	if err != nil {
+		return stat, err
+	}
+
+	attrs := strings.Split(string(xstat), ":")
+	if len(attrs) != 3 {
+		return stat, fmt.Errorf("The number of clons in %s does not equal to 3",
+			xattr)
+	}
+
+	value, err := strconv.ParseUint(attrs[0], 10, 32)
+	if err != nil {
+		return stat, fmt.Errorf("Failed to parse UID: %w", err)
+	}
+
+	stat.IDs.UID = int(value)
+
+	value, err = strconv.ParseUint(attrs[0], 10, 32)
+	if err != nil {
+		return stat, fmt.Errorf("Failed to parse GID: %w", err)
+	}
+
+	stat.IDs.GID = int(value)
+
+	value, err = strconv.ParseUint(attrs[2], 8, 32)
+	if err != nil {
+		return stat, fmt.Errorf("Failed to parse mode: %w", err)
+	}
+
+	stat.Mode = os.FileMode(value)
+
+	return stat, nil
+}
+
+// SetOverrideXattr will encode and set an extended attribute overriding file
+// states.
+func SetOverrideXattr(path, xattr string, stat Stat) error {
+	value := fmt.Sprintf("%d:%d:0%o", stat.IDs.UID, stat.IDs.GID, stat.Mode)
+	return system.Lsetxattr(path, xattr, []byte(value), 0)
+}
+
 func SafeChown(name string, uid, gid int) error {
 	if runtime.GOOS == "darwin" {
-		var mode uint64 = 0o0700
+		var mode os.FileMode = 0o0700
 		xstat, err := system.Lgetxattr(name, ContainersOverrideXattr)
 		if err == nil {
 			attrs := strings.Split(string(xstat), ":")
 			if len(attrs) == 3 {
 				val, err := strconv.ParseUint(attrs[2], 8, 32)
 				if err == nil {
-					mode = val
+					mode = os.FileMode(val)
 				}
 			}
 		}
-		value := fmt.Sprintf("%d:%d:0%o", uid, gid, mode)
-		if err = system.Lsetxattr(name, ContainersOverrideXattr, []byte(value), 0); err != nil {
+		value := Stat{IDPair{uid, gid}, mode}
+		if err = SetOverrideXattr(name, ContainersOverrideXattr, value); err != nil {
 			return err
 		}
 		uid = os.Getuid()
@@ -397,19 +450,19 @@ func SafeChown(name string, uid, gid int) error {
 
 func SafeLchown(name string, uid, gid int) error {
 	if runtime.GOOS == "darwin" {
-		var mode uint64 = 0o0700
+		var mode os.FileMode = 0o0700
 		xstat, err := system.Lgetxattr(name, ContainersOverrideXattr)
 		if err == nil {
 			attrs := strings.Split(string(xstat), ":")
 			if len(attrs) == 3 {
 				val, err := strconv.ParseUint(attrs[2], 8, 32)
 				if err == nil {
-					mode = val
+					mode = os.FileMode(val)
 				}
 			}
 		}
-		value := fmt.Sprintf("%d:%d:0%o", uid, gid, mode)
-		if err = system.Lsetxattr(name, ContainersOverrideXattr, []byte(value), 0); err != nil {
+		value := Stat{IDPair{uid, gid}, mode}
+		if err = SetOverrideXattr(name, ContainersOverrideXattr, value); err != nil {
 			return err
 		}
 		uid = os.Getuid()

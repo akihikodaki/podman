@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"io"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"time"
-	"unicode"
 
 	"github.com/containers/storage/pkg/chunked/internal"
 	"golang.org/x/sys/unix"
@@ -25,15 +25,21 @@ func escaped(val string, escape int) string {
 	escapeEqual := escape&ESCAPE_EQUAL != 0
 	escapeLoneDash := escape&ESCAPE_LONE_DASH != 0
 
-	length := len(val)
-
 	if escapeLoneDash && val == "-" {
 		return fmt.Sprintf("\\x%.2x", val[0])
 	}
 
+	// This is intended to match the C isprint API with LC_CTYPE=C
+	isprint := func(c byte) bool {
+		return c >= 32 && c < 127
+	}
+	// This is intended to match the C isgraph API with LC_CTYPE=C
+	isgraph := func(c byte) bool {
+		return c > 32 && c < 127
+	}
+
 	var result string
-	for i := 0; i < length; i++ {
-		c := val[i]
+	for _, c := range []byte(val) {
 		hexEscape := false
 		var special string
 
@@ -50,9 +56,9 @@ func escaped(val string, escape int) string {
 			hexEscape = escapeEqual
 		default:
 			if noescapeSpace {
-				hexEscape = !unicode.IsPrint(rune(c))
+				hexEscape = !isprint(c)
 			} else {
-				hexEscape = !unicode.IsPrint(rune(c)) || unicode.IsSpace(rune(c))
+				hexEscape = !isgraph(c)
 			}
 		}
 
@@ -104,11 +110,11 @@ func sanitizeName(name string) string {
 	return path
 }
 
-func dumpNode(out io.Writer, added map[string]struct{}, links map[string]int, verityDigests map[string]string, entry *internal.FileMetadata) error {
+func dumpNode(out io.Writer, added map[string]*internal.FileMetadata, links map[string]int, verityDigests map[string]string, entry *internal.FileMetadata) error {
 	path := sanitizeName(entry.Name)
 
 	parent := filepath.Dir(path)
-	if _, found := added[parent]; !found && entry.Name != "/" {
+	if _, found := added[parent]; !found && path != "/" {
 		parentEntry := &internal.FileMetadata{
 			Name: parent,
 			Type: internal.TypeDir,
@@ -119,7 +125,14 @@ func dumpNode(out io.Writer, added map[string]struct{}, links map[string]int, ve
 		}
 
 	}
-	added[path] = struct{}{}
+	if e, found := added[path]; found {
+		// if the entry was already added, make sure it has the same data
+		if !reflect.DeepEqual(*e, *entry) {
+			return fmt.Errorf("entry %q already added with different data", path)
+		}
+		return nil
+	}
+	added[path] = entry
 
 	if _, err := fmt.Fprint(out, escaped(path, ESCAPE_STANDARD)); err != nil {
 		return err
@@ -215,7 +228,7 @@ func GenerateDump(tocI interface{}, verityDigests map[string]string) (io.Reader,
 		}()
 
 		links := make(map[string]int)
-		added := make(map[string]struct{})
+		added := make(map[string]*internal.FileMetadata)
 		for _, e := range toc.Entries {
 			if e.Linkname == "" {
 				continue
