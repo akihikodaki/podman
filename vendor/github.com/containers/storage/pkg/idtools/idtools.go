@@ -38,10 +38,9 @@ func (e ranges) Swap(i, j int)      { e[i], e[j] = e[j], e[i] }
 func (e ranges) Less(i, j int) bool { return e[i].Start < e[j].Start }
 
 const (
-	subuidFileName             string = "/etc/subuid"
-	subgidFileName             string = "/etc/subgid"
-	FuseoverlayfsOverrideXattr        = "user.fuseoverlayfs.override_stat"
-	ContainersOverrideXattr           = "user.containers.override_stat"
+	subuidFileName          string = "/etc/subuid"
+	subgidFileName          string = "/etc/subgid"
+	ContainersOverrideXattr        = "user.containers.override_stat"
 )
 
 // MkdirAllAs creates a directory (include any along the path) and then modifies
@@ -368,17 +367,16 @@ func checkChownErr(err error, name string, uid, gid int) error {
 	return err
 }
 
-// Stat contains file states that can be overriden with extended attributes.
+// Stat contains file states that can be overriden with ContainersOverrideXattr.
 type Stat struct {
 	IDs  IDPair
 	Mode os.FileMode
 }
 
-// GetOverrideXattr will get and decode an extended attribute overriding file
-// states.
-func GetOverrideXattr(path, xattr string) (Stat, error) {
+// GetContainersOverrideXattr will get and decode ContainersOverrideXattr.
+func GetContainersOverrideXattr(path string) (Stat, error) {
 	var stat Stat
-	xstat, err := system.Lgetxattr(path, xattr)
+	xstat, err := system.Lgetxattr(path, ContainersOverrideXattr)
 	if err != nil {
 		return stat, err
 	}
@@ -386,7 +384,7 @@ func GetOverrideXattr(path, xattr string) (Stat, error) {
 	attrs := strings.Split(string(xstat), ":")
 	if len(attrs) != 3 {
 		return stat, fmt.Errorf("The number of clons in %s does not equal to 3",
-			xattr)
+			ContainersOverrideXattr)
 	}
 
 	value, err := strconv.ParseUint(attrs[0], 10, 32)
@@ -413,11 +411,10 @@ func GetOverrideXattr(path, xattr string) (Stat, error) {
 	return stat, nil
 }
 
-// SetOverrideXattr will encode and set an extended attribute overriding file
-// states.
-func SetOverrideXattr(path, xattr string, stat Stat) error {
+// SetContainersOverrideXattr will encode and set ContainersOverrideXattr.
+func SetContainersOverrideXattr(path string, stat Stat) error {
 	value := fmt.Sprintf("%d:%d:0%o", stat.IDs.UID, stat.IDs.GID, stat.Mode)
-	return system.Lsetxattr(path, xattr, []byte(value), 0)
+	return system.Lsetxattr(path, ContainersOverrideXattr, []byte(value), 0)
 }
 
 func SafeChown(name string, uid, gid int) error {
@@ -434,7 +431,7 @@ func SafeChown(name string, uid, gid int) error {
 			}
 		}
 		value := Stat{IDPair{uid, gid}, mode}
-		if err = SetOverrideXattr(name, ContainersOverrideXattr, value); err != nil {
+		if err = SetContainersOverrideXattr(name, value); err != nil {
 			return err
 		}
 		uid = os.Getuid()
@@ -462,7 +459,7 @@ func SafeLchown(name string, uid, gid int) error {
 			}
 		}
 		value := Stat{IDPair{uid, gid}, mode}
-		if err = SetOverrideXattr(name, ContainersOverrideXattr, value); err != nil {
+		if err = SetContainersOverrideXattr(name, value); err != nil {
 			return err
 		}
 		uid = os.Getuid()
